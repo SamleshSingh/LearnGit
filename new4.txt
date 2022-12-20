@@ -1,0 +1,285 @@
+using AtoGenericWebServiceClients.TrackDataAdapterClient;
+using AtoGenericWebServiceClients.TravelPlanAdapterClient;
+using AtoUnitTest;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SS126;
+using SS126.SS126Api;
+using System;
+using System.Linq;
+using System.Threading;
+
+namespace RequirementsTests.Unassigned.WebServiceTests
+{
+    [TestClass]
+    public class TrackDataServiceTests : TestBase
+    {
+        public TrackDataWsPort TrackDataService { get; private set; }
+
+        public TravelPlanWsPort TravelplanService { get; private set; }
+
+        [TestInitialize]
+        public void RemoveAll()
+        {
+            NID_OPERATIONAL = 0x1234FFFF;
+            StartOnbordTelegramgenerator();
+
+            TrackDataService = WebServiceHelper.CreateTrackDataService();
+            Assert.IsNotNull(TrackDataService);
+
+            TravelplanService = WebServiceHelper.CreateTravelplanService();
+            Assert.IsNotNull(TravelplanService);
+
+            // Remove all segments from AtoCore
+            TrackDataService.removeAll(new AtoGenericWebServiceClients.TrackDataAdapterClient.removeAllRequest(new AtoGenericWebServiceClients.TrackDataAdapterClient.void1()));
+
+            // Remove all journeys from AtoCore
+            TravelplanService.removeAll(new AtoGenericWebServiceClients.TravelPlanAdapterClient.removeAllRequest(new AtoGenericWebServiceClients.TravelPlanAdapterClient.void1()));
+
+        }
+
+        // Add all track data and get list of all track data
+        // Check if all track data got from webservice exist in import
+        [TestMethod]
+        public void TestAddAndGetTrackDataList()
+        {
+            var segments = ResourceHelper.ReadTrackArea(TestHelpers.Properties.Resources.SampleSegment);
+            Assert.IsNotNull(segments);
+
+            //// expected handshake acknowledgment
+            //HandshakeAck ack = new HandshakeAck();
+            //ack.M_ATO_Version = Constants.SUPPORTED_ATO_VERSIONS;
+            //ack.Header.NID_ENGINE = obConnection.NID_ENGINE;
+            //ack.Header.NID_OPERATIONAL = obConnection.NID_OPERATIONAL;
+            //ack.Header.N_Packet_Counter = 0;
+            //ack.Header.T_Timestamp_Date = DateTimeHelper.GetDaysSinceZero(DateTime.UtcNow);
+            //ack.Header.T_Timestamp_Seconds = DateTimeHelper.GetSecondsSinceZero(DateTime.UtcNow);
+
+            //Assert.IsTrue(HSReqHelper.SendAndCompareHandShake(obConnection,
+            //    new HandshakeReq { N_ITER = 1, M_ATO_Version = new ushort[] { Constants.SUPPORTED_ATO_VERSIONS } }, ack));
+
+            // Import Sample segments
+            TrackDataService.add(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest()
+            {
+                trackAreaSegments = segments
+            }));
+
+            var res = TrackDataService.get(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest() { 
+                trackAreaName = segments.trackAreaName
+            }));
+
+            Assert.IsNotNull(res);
+            Assert.AreEqual(segments.segmentProfile.Length, res.getResponse.trackArea.segmentProfile.Length);
+
+            for (int i = 0; i < segments.segmentProfile.Length; i++)
+            {
+                var segmentToCheck = segments.segmentProfile[0];
+
+                Assert.IsTrue(res.getResponse.trackArea.segmentProfile.Any(s=>s.segmentId.nid_SP == segmentToCheck.segmentId.nid_SP
+                    && s.segmentId.m_SP_Version == segmentToCheck.segmentId.m_SP_Version && s.segmentId.nid_C == segmentToCheck.segmentId.m_SP_Version));
+            }
+        }
+
+        //Add and Get track data and compare results
+        [TestMethod]
+        public void TestAddAndGetTrackData()
+        {
+            var segments = ResourceHelper.ReadTrackArea(TestHelpers.Properties.Resources.Shift2RailSegments_Edge);
+            Assert.IsNotNull(segments);
+
+            // expected handshake acknowledgement
+            HandshakeAck ack = new HandshakeAck();
+            ack.M_ATO_Version = Constants.SUPPORTED_ATO_VERSIONS;
+            ack.Header.NID_ENGINE = obConnection.NID_ENGINE;
+            ack.Header.NID_OPERATIONAL = obConnection.NID_OPERATIONAL;
+            ack.Header.N_Packet_Counter = 0;
+            ack.Header.T_Timestamp_Date = DateTimeHelper.GetDaysSinceZero(DateTime.UtcNow);
+            ack.Header.T_Timestamp_Seconds = DateTimeHelper.GetSecondsSinceZero(DateTime.UtcNow);
+
+            Assert.IsTrue(HSReqHelper.SendAndCompareHandShake(obConnection,
+                new HandshakeReq { N_ITER = 1, M_ATO_Version = new ushort[] { Constants.SUPPORTED_ATO_VERSIONS } }, ack));
+
+            // Import Sample segment
+            segments.segmentProfile = segments.segmentProfile.Skip(2).Take(1).ToArray();
+            TrackDataService.add(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest()
+            {
+                // Add just one segment
+                trackAreaSegments = segments
+            })); ;
+
+            AtoGenericWebServiceClients.TrackDataAdapterClient.getResponse1 res = TrackDataService.get(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest()
+            {
+                trackAreaName = segments.trackAreaName
+            }));
+
+            var compareSegment = res.getResponse.trackArea.segmentProfile.FirstOrDefault(s => s.segmentId.nid_SP == 2600 && s.segmentId.nid_C == 290 && s.segmentId.m_SP_Version == 1);
+
+            Assert.IsNotNull(compareSegment);
+            Assert.AreEqual(segments.segmentProfile[0].segmentId.nid_SP, compareSegment.segmentId.nid_SP);
+            Assert.AreEqual(segments.segmentProfile[0].segmentId.nid_C, compareSegment.segmentId.nid_C);
+            Assert.AreEqual(segments.segmentProfile[0].segmentId.m_SP_Version, compareSegment.segmentId.m_SP_Version);
+
+            Assert.AreEqual(segments.segmentProfile[0].staticSpeedProfile.q_FRONT, compareSegment.staticSpeedProfile.q_FRONT);
+
+            Assert.AreEqual(segments.segmentProfile[0].staticSpeedProfile.v_STATIC, compareSegment.staticSpeedProfile.v_STATIC);
+            Assert.AreEqual(segments.segmentProfile[0].staticSpeedProfile.q_FRONT, compareSegment.staticSpeedProfile.q_FRONT);
+
+            Assert.AreEqual(segments.segmentProfile[0].powerVoltage.powerVoltageDefinition.Item, compareSegment.powerVoltage.powerVoltageDefinition.Item);
+
+            Assert.AreEqual(segments.segmentProfile[0].curve.curveDefinition.q_Curve_Side, compareSegment.curve.curveDefinition.q_Curve_Side);
+            Assert.AreEqual(segments.segmentProfile[0].curve.curveDefinition.n_Radius_Category, compareSegment.curve.curveDefinition.n_Radius_Category);
+
+            Assert.AreEqual(segments.segmentProfile[0].d_EoA_Offset, compareSegment.d_EoA_Offset);
+            Assert.AreEqual(segments.segmentProfile[0].l_SP, compareSegment.l_SP);
+            Assert.AreEqual(segments.segmentProfile[0].q_UTC_Offset, compareSegment.q_UTC_Offset);
+            Assert.AreEqual(segments.segmentProfile[0].m_SP_Altitude, compareSegment.m_SP_Altitude);
+
+            Assert.AreEqual(segments.segmentProfile[0].gradient.newGradient.q_GDIR, compareSegment.gradient.newGradient.q_GDIR);
+            Assert.AreEqual(segments.segmentProfile[0].gradient.newGradient.g_New_Gradient, compareSegment.gradient.newGradient.g_New_Gradient);
+
+            Assert.IsNull(compareSegment.currentLimitation.currentLimitationChangeList);
+
+            Assert.IsNull(compareSegment.timingPointList);
+            Assert.IsNull(compareSegment.switchOffEddyCurrentBrakeList);
+            Assert.IsNull(compareSegment.switchOffRegenerativeBrakeList);
+            Assert.IsNull(compareSegment.switchOffMagneticShoeBrakeList);
+            Assert.IsNull(compareSegment.switchOffEddyCurrentEmergencyBrakeList);
+            Assert.IsNull(compareSegment.powerlessSectionList);
+            Assert.IsNull(compareSegment.platformAreaList);
+            Assert.IsNull(compareSegment.permittedBreakingDistanceList);
+            Assert.IsNull(compareSegment.baliseGroupList);
+            Assert.IsNull(compareSegment.axleLoadSpeedProfileList);
+        }
+
+        //Trying to add location of timing point larger than length of the segment and expecting exception
+        [TestMethod]
+        [ExpectedException(typeof(System.ServiceModel.ProtocolException),
+        "Segment:{NID_C:290, NID_SP:21556, Ver:1} parameter:'Timing points' is invalid. D_Location:809700")]
+        public void TestAddTrackData()
+        {
+            var segments = ResourceHelper.ReadTrackArea(TestHelpers.Properties.Resources.Shift2RailSegments_Edge);
+            Assert.IsNotNull(segments);
+
+            // expected handshake acknowledgment
+            HandshakeAck ack = new HandshakeAck();
+            ack.M_ATO_Version = Constants.SUPPORTED_ATO_VERSIONS;
+            ack.Header.NID_ENGINE = obConnection.NID_ENGINE;
+            ack.Header.NID_OPERATIONAL = obConnection.NID_OPERATIONAL;
+            ack.Header.N_Packet_Counter = 0;
+            ack.Header.T_Timestamp_Date = DateTimeHelper.GetDaysSinceZero(DateTime.UtcNow);
+            ack.Header.T_Timestamp_Seconds = DateTimeHelper.GetSecondsSinceZero(DateTime.UtcNow);
+
+            Assert.IsTrue(HSReqHelper.SendAndCompareHandShake(obConnection,
+                new HandshakeReq { N_ITER = 1, M_ATO_Version = new ushort[] { Constants.SUPPORTED_ATO_VERSIONS } }, ack));
+
+            SegmentProfileXml segment = null;
+            foreach (var tempSegment in segments.segmentProfile)
+            {
+                if (tempSegment.segmentId.nid_SP == 21556)
+                {
+                    segment = tempSegment;
+                    break;
+                }
+            }
+
+            Assert.IsNotNull(segment);
+
+            segment.timingPointList[0].d_Location = segment.l_SP + 100;
+
+            // Import Sample segment
+            TrackDataService.add(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest()
+            {
+                trackAreaSegments = segments
+            }));
+
+            Assert.Fail("TrackDataService must throw Soap Exception");
+        }
+
+
+        // 1. Add track data
+        // 2. remove that one track data and try to get all track data to check if that track data is removed
+        [TestMethod]
+        public void TestRemoveTrackData1()
+        {
+            var segments = ResourceHelper.ReadTrackArea(TestHelpers.Properties.Resources.Shift2RailSegments_Edge);
+            Assert.IsNotNull(segments);
+
+            // expected handshake acknowledgement
+            HandshakeAck ack = new HandshakeAck();
+            ack.M_ATO_Version = Constants.SUPPORTED_ATO_VERSIONS;
+            ack.Header.NID_ENGINE = obConnection.NID_ENGINE;
+            ack.Header.NID_OPERATIONAL = obConnection.NID_OPERATIONAL;
+            ack.Header.N_Packet_Counter = 0;
+            ack.Header.T_Timestamp_Date = DateTimeHelper.GetDaysSinceZero(DateTime.UtcNow);
+            ack.Header.T_Timestamp_Seconds = DateTimeHelper.GetSecondsSinceZero(DateTime.UtcNow);
+
+            Assert.IsTrue(HSReqHelper.SendAndCompareHandShake(obConnection,
+                new HandshakeReq { N_ITER = 1, M_ATO_Version = new ushort[] { Constants.SUPPORTED_ATO_VERSIONS } }, ack));
+
+            // Import Sample segments
+            TrackDataService.add(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest()
+            {
+                trackAreaSegments = segments
+            }));
+
+            Func<SegmentProfileXml, bool> filterPredicate = s => s.segmentId.nid_SP != Convert.ToUInt32(21556);
+
+            var lengthOfAllSegments = segments.segmentProfile.Length;
+
+            // segments array with segment matching filter predicate
+            segments.segmentProfile = segments.segmentProfile.Where(filterPredicate).ToArray();
+
+            // Ensure that the segment is removed
+            Assert.AreNotEqual(lengthOfAllSegments, segments.segmentProfile.Length);
+
+            TrackDataService.add(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest()
+            {
+                trackAreaSegments = segments
+            }));
+
+            AtoGenericWebServiceClients.TrackDataAdapterClient.getResponse1 res = TrackDataService.get(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest()
+            {
+                trackAreaName = segments.trackAreaName
+            }));
+
+            Assert.IsNotNull(res);
+            Assert.AreEqual(segments.segmentProfile.Length, res.getResponse.trackArea.segmentProfile.Length);
+            Assert.IsFalse(res.getResponse.trackArea.segmentProfile.Any(filterPredicate));
+        }
+
+        // Add all track adta then remove all track data and try to get any one 
+        // track data to check if exception is thrown
+        [TestMethod]
+        [ExpectedException(typeof(System.ServiceModel.FaultException),"segment NID_C: 290 NID_SP: 21556 M_SP_Version: 1 not found")]
+        public void TestRemoveAllTrackData()
+        {
+            var segments = ResourceHelper.ReadTrackArea(TestHelpers.Properties.Resources.Shift2RailSegments_Edge);
+            Assert.IsNotNull(segments);
+
+            // expected handshake acknowledgement
+            HandshakeAck ack = new HandshakeAck();
+            ack.M_ATO_Version = Constants.SUPPORTED_ATO_VERSIONS;
+            ack.Header.NID_ENGINE = obConnection.NID_ENGINE;
+            ack.Header.NID_OPERATIONAL = obConnection.NID_OPERATIONAL;
+            ack.Header.N_Packet_Counter = 0;
+            ack.Header.T_Timestamp_Date = DateTimeHelper.GetDaysSinceZero(DateTime.UtcNow);
+            ack.Header.T_Timestamp_Seconds = DateTimeHelper.GetSecondsSinceZero(DateTime.UtcNow);
+
+            Assert.IsTrue(HSReqHelper.SendAndCompareHandShake(obConnection,
+                new HandshakeReq { N_ITER = 1, M_ATO_Version = new ushort[] { Constants.SUPPORTED_ATO_VERSIONS } }, ack));
+
+            // Import Sample segments
+            TrackDataService.add(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest()
+            {
+                trackAreaSegments = segments
+            }));
+
+            TrackDataService.removeAll(new AtoGenericWebServiceClients.TrackDataAdapterClient.removeAllRequest(new AtoGenericWebServiceClients.TrackDataAdapterClient.void1()
+            ));
+
+            AtoGenericWebServiceClients.TrackDataAdapterClient.getResponse1 res = TrackDataService.get(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest()
+            {
+                trackAreaName = segments.trackAreaName
+            }));
+        }
+    }
+}
