@@ -1,7 +1,9 @@
-using AtoGenericWebServiceClients.TrackDataAdapterClient;
-using AtoGenericWebServiceClients.TravelPlanAdapterClient;
-using AtoUnitTest;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+clear
+
+this is a new upadted file
+adddedone more line
+
+
 using SS126;
 using SS126.SS126Api;
 using System;
@@ -217,7 +219,7 @@ namespace RequirementsTests.Unassigned.WebServiceTests
 
             // Import Sample segments
             TrackDataService.add(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.addRequest()
-            {
+
                 trackAreaSegments = segments
             }));
 
@@ -278,8 +280,8 @@ namespace RequirementsTests.Unassigned.WebServiceTests
 
             AtoGenericWebServiceClients.TrackDataAdapterClient.getResponse1 res = TrackDataService.get(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest1(new AtoGenericWebServiceClients.TrackDataAdapterClient.getRequest()
             {
-                trackAreaName = segments.trackAreaName
+
             }));
         }
     }
-}
+
